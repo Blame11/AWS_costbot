@@ -7,6 +7,7 @@ variable "aws_region" {
 variable "notification_email" {
   description = "The email address to receive cost reports."
   type        = string
+  default = "tushar11kand@gmail.com"
 }
 
 variable "project_name" {

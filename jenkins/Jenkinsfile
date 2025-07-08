@@ -3,8 +3,7 @@ pipeline {
 
     environment {
         AWS_CREDENTIALS_ID = 'your-jenkins-aws-credentials-id'
-        BITBUCKET_CREDENTIALS_ID = 'your-jenkins-bitbucket-credentials-id'
-        TF_WORKING_DIR = 'terraform'
+        TF_WORKING_DIR = 'Terraform'
         AWS_DEFAULT_REGION = 'us-east-1'
     }
 
@@ -14,8 +13,7 @@ pipeline {
                 checkout([
                     $class: 'GitSCM',
                     userRemoteConfigs: [[
-                        url: 'https://bitbucket.org/your-org/aws-costbot.git',
-                        credentialsId: BITBUCKET_CREDENTIALS_ID
+                        url: 'https://github.com/Blame11/AWS_costbot.git',
                     ]]
                 ])
             }
