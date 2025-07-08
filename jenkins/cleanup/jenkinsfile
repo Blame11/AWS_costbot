@@ -1,0 +1,74 @@
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'REPORT_ID', defaultValue: '', description: 'Report ID from the SNS notification')
+    }
+
+    environment {
+        AWS_CREDENTIALS_ID = 'your-jenkins-aws-credentials-id'
+        AWS_DEFAULT_REGION = 'us-east-1'
+    }
+
+    stages {
+        stage('Validation') {
+            steps {
+                script {
+                    if (params.REPORT_ID.trim().isEmpty()) {
+                        error 'FATAL: REPORT_ID parameter cannot be empty.'
+                    }
+                    echo "Preparing to clean up resources from report: ${params.REPORT_ID}"
+                }
+            }
+        }
+
+        stage('Manual Approval') {
+            steps {
+                timeout(time: 15, unit: 'MINUTES') {
+                    input message: "You are about to execute cleanup for report [${params.REPORT_ID}]. This will STOP/SNAPSHOT/DELETE resources. Are you sure?", ok: 'Yes, Proceed with Cleanup'
+                }
+            }
+        }
+
+        stage('Invoke Cleanup Lambda') {
+            steps {
+                withAWS(credentials: AWS_CREDENTIALS_ID, region: AWS_DEFAULT_REGION) {
+                    script {
+                        // Dynamically get the function name from the tfstate or a known location.
+                        // For simplicity here, we assume it is known or we fetch it.
+                        // Best practice: Use a shared library or a mechanism to get the name.
+                        // A simple approach is to have a common tagging scheme.
+                        // Or, pass it from the deployment job.
+                        def functionName = 'aws-cost-bot' // Update with your project name from Terraform variables
+
+                        // Construct the JSON payload
+                        def payload = """
+                        {
+                            "action": "cleanup",
+                            "report_id": "${params.REPORT_ID}"
+                        }
+                        """
+                        // Use a temporary file for the payload to handle escaping
+                        writeFile file: 'payload.json', text: payload
+
+                        // Invoke the lambda and capture the response
+                        sh "aws lambda invoke --function-name ${functionName} --payload file://payload.json response.json"
+                        
+                        echo 'Lambda invocation complete. Response:'
+                        def response = readFile 'response.json'
+                        echo response
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs(deleteDirs: true)
+        }
+        success {
+            echo "Cleanup for report ${params.REPORT_ID} completed."
+        }
+    }
+}

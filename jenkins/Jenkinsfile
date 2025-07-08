@@ -1,0 +1,92 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_CREDENTIALS_ID = 'your-jenkins-aws-credentials-id'
+        BITBUCKET_CREDENTIALS_ID = 'your-jenkins-bitbucket-credentials-id'
+        TF_WORKING_DIR = 'terraform'
+        AWS_DEFAULT_REGION = 'us-east-1'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout([
+                    $class: 'GitSCM',
+                    userRemoteConfigs: [[
+                        url: 'https://bitbucket.org/your-org/aws-costbot.git',
+                        credentialsId: BITBUCKET_CREDENTIALS_ID
+                    ]]
+                ])
+            }
+        }
+
+        stage('Terraform Init & Plan') {
+            steps {
+                dir(TF_WORKING_DIR) {
+                    withAWS(credentials: AWS_CREDENTIALS_ID, region: AWS_DEFAULT_REGION) {
+                        sh 'terraform init'
+                        sh 'terraform plan -var="notification_email=tushar11kand@gmail.com" -out=tfplan'
+                        // Store plan for apply stage
+                        stash name: 'tfplan', includes: 'terraform/tfplan'
+                    }
+                }
+            }
+        }
+
+        stage('Terraform Apply (Approval)') {
+            steps {
+                input message: 'Review the Terraform plan. Do you want to apply these changes?', ok: 'Apply'
+                dir(TF_WORKING_DIR) {
+                    withAWS(credentials: AWS_CREDENTIALS_ID, region: AWS_DEFAULT_REGION) {
+                        unstash 'tfplan'
+                        sh 'terraform apply tfplan'
+                    }
+                }
+            }
+        }
+        
+        stage('Package & Deploy Lambda') {
+            steps {
+                script {
+                    // Get the Lambda function name from Terraform output
+                    def lambdaFuncName = ''
+                    dir(TF_WORKING_DIR) {
+                        withAWS(credentials: AWS_CREDENTIALS_ID, region: AWS_DEFAULT_REGION) {
+                           lambdaFuncName = sh(script: 'terraform output -raw lambda_function_name', returnStdout: true).trim()
+                        }
+                    }
+                    
+                    if (!lambdaFuncName) {
+                        error "Could not retrieve Lambda function name from Terraform output."
+                    }
+                    
+                    echo "Deploying code to Lambda function: ${lambdaFuncName}"
+                    
+                    // Package Python dependencies and function code
+                    dir(LAMBDA_DIR) {
+                        sh 'pip install -r requirements.txt -t .'
+                    }
+                    sh 'zip -r lambda_deployment.zip lambda/'
+                    
+                    // Deploy the zip file to AWS Lambda
+                    withAWS(credentials: AWS_CREDENTIALS_ID, region: AWS_DEFAULT_REGION) {
+                        sh "aws lambda update-function-code --function-name ${lambdaFuncName} --zip-file fileb://lambda_deployment.zip"
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs() // Clean up workspace
+        }
+        success {
+            echo 'Deployment pipeline completed successfully.'
+        }
+        failure {
+            echo 'Deployment pipeline failed.'
+        }
+    }
+}
