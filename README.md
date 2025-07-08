@@ -26,7 +26,8 @@ This project provides a **serverless, automated solution** for identifying and m
 
 ## Architecture
 
-![AWS Cost Bot Architecture](https://i.imgur.com/z4b0uXg.png)
+![Untitled diagram _ Mermaid Chart-2025-07-08-094017](https://github.com/user-attachments/assets/6a2bbebf-0cf5-4b6f-aab4-6b12ba43e659)
+
 
 **Scheduled Scan (Daily):**
 - An Amazon EventBridge rule triggers the Lambda function on a daily cron schedule.
