@@ -185,6 +185,3 @@ Terraform/
 
 ---
 
-## License
-
-MIT License (add your license file if needed)
